@@ -1,4 +1,3 @@
-const RECORD_CHUNK = 100 // milliseconds
 const SKIP_AMOUNT = 3 // seconds
 const SKIP_BACK = 37
 const SKIP_FORWARD = 39
@@ -18,16 +17,28 @@ audioEl.onpause = () => {
   playStateDisplayEl.style.color = "inherit"
   playStateDisplayEl.innerText = "paused"
 }
-
-navigator.mediaDevices.getUserMedia({ audio: true })
-  .then(function (stream) {
+Promise.all([
+  navigator.mediaDevices.getUserMedia({ audio: true }),
+  navigator.requestMIDIAccess()
+])
+  .then(([stream, midiAccess]) => {
     const mediaRecorder = new MediaRecorder(stream);
     let chunks = [];
     let oldAudioUrl = null
     let recordStartTime = 0
+
+
+    const updateRecordingTime = () => { // TODO: consider using high-res timestamp we get as arg.
+      if (recordStartTime != 0) {
+        const elapsed = ((new Date()).getTime() - recordStartTime) / 1000
+        recordingStateDurationEl.innerText = `${elapsed}s`
+      }
+      window.requestAnimationFrame(updateRecordingTime)
+    }
+
+    window.requestAnimationFrame(updateRecordingTime)
+
     mediaRecorder.ondataavailable = (e) => {
-      const elapsed = ((new Date()).getTime() - recordStartTime) / 1000
-      recordingStateDurationEl.innerText = `${elapsed}s`
       chunks.push(e.data);
     }
     mediaRecorder.onstart = () => {
@@ -36,6 +47,7 @@ navigator.mediaDevices.getUserMedia({ audio: true })
       recordingStateDisplayEl.innerText = "recording"
     }
     mediaRecorder.onstop = (e) => {
+      recordStartTime = 0
       recordingStateDisplayEl.style.color = "inherit"
       recordingStateDisplayEl.innerText = "stopped"
       const blob = new Blob(chunks, { 'type': 'audio/ogg; codecs=opus' });
@@ -63,7 +75,7 @@ navigator.mediaDevices.getUserMedia({ audio: true })
       else {
         // We don't want ot play while we're recording, so stop the player.
         audioEl.pause()
-        mediaRecorder.start(RECORD_CHUNK)
+        mediaRecorder.start()
       }
     }
 
@@ -80,7 +92,15 @@ navigator.mediaDevices.getUserMedia({ audio: true })
     function recordPlayOrPause() {
       if (!audioEl.paused) audioEl.pause()
       else if (mediaRecorder.state === "recording") mediaRecorder.stop()
-      else mediaRecorder.start(RECORD_CHUNK)
+      else mediaRecorder.start()
+    }
+
+    for (let input of midiAccess.inputs.values()) {
+      // TODO: handle getting new midi devices
+      input.onmidimessage = (msg) => {
+        console.log("midi message", msg)
+        recordPlayOrPause()
+      }
     }
 
     window.onkeydown = (e) => {
