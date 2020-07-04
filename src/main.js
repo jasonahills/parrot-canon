@@ -116,3 +116,7 @@ Promise.all([
   .catch((err) => {
     console.log("getUserMedia error", err);
   })
+
+function getPeaks() {
+
+}
